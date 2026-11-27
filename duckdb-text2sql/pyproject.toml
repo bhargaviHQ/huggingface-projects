@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Small, execution-verified text-to-SQL models for DuckDB"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["duckdb>=1.1"]
+dependencies = [
+    "duckdb>=1.1",
+    "pyarrow>=26.0.1",
+    "sqlglot>=30.35.0",
+]
 
 [dependency-groups]
 dev = ["pytest>=8"]

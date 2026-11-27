@@ -4,15 +4,47 @@ Small, **execution-verified** text-to-SQL models for [DuckDB](https://duckdb.org
 
 ## Status
 
-Phase 0 (baseline evaluation) is done. Next up is phase 1, the dataset pipeline.
+Phase 0 (baseline evaluation) is done. Phase 1a (Spider converted to DuckDB) is done; 1b (DuckDB-specific examples) is next.
 
 | Phase | What | Status |
 |---|---|---|
 | 0 | Eval harness + 50 hand-written questions, baseline off-the-shelf models | Done |
-| 1 | Synthetic dataset pipeline, verified by executing every query in DuckDB | Next |
+| 1a | Spider converted to DuckDB, every query verified by execution | Done |
+| 1b | DuckDB-specific examples (`LIST`/`STRUCT` columns, `QUALIFY`, dates) | Next |
 | 2 | Fine-tune a small model (LoRA / SFT) | Planned |
 | 3 | RL with execution-based rewards | Planned |
 | 4 | Hugging Face Space demo + CI/CD | Planned |
+
+## Training data: Spider-DuckDB
+
+`src/text2sql/spider.py` converts [Spider](https://yale-lily.github.io/spider) (SQLite) into a DuckDB dataset and keeps an example only if the DuckDB query returns the same result as the original SQLite query on the same data. The dataset card in [`dataset_cards/spider-duckdb.md`](dataset_cards/spider-duckdb.md) describes every step.
+
+| | train | validation |
+|---|---|---|
+| Spider examples | 7,000 | 1,034 |
+| Kept after execution check | 6,339 (90.6%) | 919 (88.9%) |
+
+A plain sqlglot transpile kept only 4,515 train examples (64.5%). Most of the gap came from SQLite behaviour that DuckDB rejects or treats differently, fixed in the query AST before transpiling:
+
+- double-quoted strings (`WHERE status != "Village"`), which SQLite reads as string literals
+- selecting columns that are neither grouped nor aggregated
+- `LIKE`, which ignores case in SQLite but not in DuckDB (sqlglot chose not to translate this: [tobymao/sqlglot#9226](https://github.com/tobymao/sqlglot/issues/9226))
+- integer division, which needs column types to transpile correctly
+
+Each fix is still checked by execution, so a wrong rewrite cannot slip in. A bug in an early version of the `GROUP BY` fix was caught this way: the rewritten queries returned different results and were rejected.
+
+Spider's databases are not in this repo. To rebuild:
+
+```bash
+mkdir -p data/raw && cd data/raw
+curl -LO https://huggingface.co/datasets/HAL-9001/spider-databases/resolve/main/spider_data.zip
+unzip -q spider_data.zip 'spider_data/database/*' spider_data/train_spider.json spider_data/dev.json
+cd ../..
+uv run python -m text2sql.spider   # about 6 minutes; writes data/processed/spider_duckdb/
+uv run python -m text2sql.hub      # assembles data/hf/spider-duckdb/ for the Hub
+```
+
+The mirrored `spider_data.zip` was checked against the official Spider questions ([xlangai/spider](https://huggingface.co/datasets/xlangai/spider)): all 7,000 train and 1,034 dev rows are identical.
 
 ## How evaluation works
 
