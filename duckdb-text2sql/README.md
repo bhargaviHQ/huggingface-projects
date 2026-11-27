@@ -4,15 +4,15 @@ Small, **execution-verified** text-to-SQL models for [DuckDB](https://duckdb.org
 
 ## Status
 
-**Phase 0 — baseline evaluation** (in progress)
+Currently working on phase 0 (baseline evaluation).
 
 | Phase | What | Status |
 |---|---|---|
-| 0 | Eval harness + 50 hand-written questions, baseline off-the-shelf models | 🚧 |
-| 1 | Synthetic dataset pipeline, verified by executing every query in DuckDB | ⏳ |
-| 2 | Fine-tune a small model (LoRA / SFT) | ⏳ |
-| 3 | RL with execution-based rewards | ⏳ |
-| 4 | Hugging Face Space demo + CI/CD | ⏳ |
+| 0 | Eval harness + 50 hand-written questions, baseline off-the-shelf models | In progress |
+| 1 | Synthetic dataset pipeline, verified by executing every query in DuckDB | Planned |
+| 2 | Fine-tune a small model (LoRA / SFT) | Planned |
+| 3 | RL with execution-based rewards | Planned |
+| 4 | Hugging Face Space demo + CI/CD | Planned |
 
 ## How evaluation works
 
