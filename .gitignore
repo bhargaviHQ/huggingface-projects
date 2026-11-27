@@ -431,3 +431,4 @@ results/
 *.duckdb
 *.duckdb.wal
 *.gguf
+CLAUDE.md
