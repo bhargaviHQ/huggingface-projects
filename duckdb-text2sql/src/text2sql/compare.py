@@ -2,7 +2,7 @@
 
 Two results match when they contain the same rows. Rules:
 - numbers compare after rounding to 2 decimals (int 3 == float 3.0 == Decimal('3.00'))
-- dates/timestamps compare by ISO string
+- dates/timestamps compare by ISO string; a midnight timestamp equals the same date
 - column order and column names are ignored (values within a row are compared as a multiset),
   but the number of columns must match
 - row order matters only when the question asks for an ordering (``ordered=True``)
@@ -30,6 +30,8 @@ def _norm_value(v: Any) -> str:
     if isinstance(v, (int, float, Decimal)):
         f = round(float(v), 2)
         return repr(0.0 if f == 0 else f)  # avoid "-0.0"
+    if isinstance(v, dt.datetime) and v.time() == dt.time(0) and v.tzinfo is None:
+        return v.date().isoformat()  # midnight timestamp == date (e.g. date_trunc output)
     if isinstance(v, (dt.datetime, dt.date, dt.time)):
         return v.isoformat()
     if isinstance(v, (list, tuple)):
