@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from text2sql.compare import results_match
@@ -28,6 +28,11 @@ def test_duplicates_matter():
 
 def test_dates():
     assert results_match([(date(2024, 1, 1),)], [(date(2024, 1, 1),)], ordered=True)
+
+
+def test_midnight_timestamp_equals_date_but_other_times_do_not():
+    assert results_match([(date(2024, 1, 1),)], [(datetime(2024, 1, 1),)], ordered=True)
+    assert not results_match([(date(2024, 1, 1),)], [(datetime(2024, 1, 1, 9, 30),)], ordered=True)
 
 
 def test_extract_sql():

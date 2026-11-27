@@ -42,17 +42,34 @@ def evaluate(backend: Backend, examples: list[dict], db_dir: Path = DEFAULT_DIR)
             records.append(rec)
             continue
         rec["latency_s"] = round(time.perf_counter() - t0, 2)
-        rec["pred_sql"] = sql = extract_sql(raw)
-        gold_rows = run_query(db, ex["gold_sql"])
-        try:
-            pred_rows = run_query(db, sql)
-        except Exception as e:
-            rec.update(status="exec_error", error=str(e).splitlines()[0][:300], correct=False)
-        else:
-            ok = results_match(gold_rows, pred_rows, ex.get("ordered", False))
-            rec.update(status="correct" if ok else "wrong_result", correct=ok)
+        rec["pred_sql"] = extract_sql(raw)
+        rec.update(score_sql(ex, db, rec["pred_sql"]))
         records.append(rec)
     return records
+
+
+def score_sql(ex: dict, db: Path, sql: str) -> dict:
+    """Execute predicted SQL and compare against the gold result."""
+    gold_rows = run_query(db, ex["gold_sql"])
+    try:
+        pred_rows = run_query(db, sql)
+    except Exception as e:
+        return {"status": "exec_error", "error": str(e).splitlines()[0][:300], "correct": False}
+    ok = results_match(gold_rows, pred_rows, ex.get("ordered", False))
+    return {"status": "correct" if ok else "wrong_result", "error": "", "correct": ok}
+
+
+def rescore(records: list[dict], examples: list[dict], db_dir: Path = DEFAULT_DIR) -> list[dict]:
+    """Re-score saved predictions (e.g. after changing comparison rules) without calling a model."""
+    by_id = {ex["id"]: ex for ex in examples}
+    out = []
+    for rec in records:
+        rec = dict(rec)
+        if "pred_sql" in rec:
+            ex = by_id[rec["id"]]
+            rec.update(score_sql(ex, db_dir / f"{ex['db']}.duckdb", rec["pred_sql"]))
+        out.append(rec)
+    return out
 
 
 def summarize(records: list[dict]) -> dict:
@@ -82,19 +99,25 @@ def main() -> None:
     ap.add_argument("--eval-file", type=Path, default=DEFAULT_EVAL)
     ap.add_argument("--limit", type=int, help="only run the first N examples")
     ap.add_argument("--rebuild-dbs", action="store_true")
+    ap.add_argument("--rescore", type=Path, metavar="RESULTS_JSONL",
+                    help="re-score saved predictions instead of calling a model")
     args = ap.parse_args()
 
     if args.rebuild_dbs or not (DEFAULT_DIR / "web.duckdb").exists():
         build_all()
-    backend: Backend = (GoldBackend() if args.backend == "gold"
-                        else OpenAICompatBackend(args.model, args.base_url, args.api_key_env))
-    examples = load_eval(args.eval_file)[: args.limit]
-    records = evaluate(backend, examples)
+    examples = load_eval(args.eval_file)
+    if args.rescore:
+        records = rescore(load_eval(args.rescore), examples)
+        stem = args.rescore.name.removesuffix(".jsonl")
+    else:
+        backend: Backend = (GoldBackend() if args.backend == "gold"
+                            else OpenAICompatBackend(args.model, args.base_url, args.api_key_env))
+        records = evaluate(backend, examples[: args.limit])
+        stem = f"{backend.name.replace('/', '_')}_{time.strftime('%Y%m%d-%H%M%S')}"
     summary = summarize(records)
 
     out_dir = ROOT / "results"
     out_dir.mkdir(exist_ok=True)
-    stem = f"{backend.name.replace('/', '_')}_{time.strftime('%Y%m%d-%H%M%S')}"
     (out_dir / f"{stem}.jsonl").write_text("\n".join(json.dumps(r) for r in records) + "\n")
     (out_dir / f"{stem}.summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))
