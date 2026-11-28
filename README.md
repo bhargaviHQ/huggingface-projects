@@ -4,7 +4,7 @@ ML projects built with the Hugging Face ecosystem (Transformers, TRL, PEFT, Data
 
 | Project | Description | Status |
 |---|---|---|
-| [duckdb-text2sql](duckdb-text2sql/) | Small text-to-SQL model for DuckDB, trained on execution-verified data. Covers the dataset pipeline, fine-tuning, RL with execution rewards and a Space demo. | In progress (phase 0: baseline eval) |
+| [duckdb-text2sql](duckdb-text2sql/) | Small text-to-SQL model for DuckDB, trained on execution-verified data. Covers the dataset pipeline, fine-tuning, RL with execution rewards and a Space demo. | In progress (phase 1: training data) |
 
 ## Conventions
 
