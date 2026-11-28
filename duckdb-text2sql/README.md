@@ -4,20 +4,20 @@ Small, **execution-verified** text-to-SQL models for [DuckDB](https://duckdb.org
 
 ## Status
 
-Phase 0 (baseline evaluation) is done. Phase 1a (Spider converted to DuckDB) is done; 1b (DuckDB-specific examples) is next.
+Phases 0 and 1 are done: a baseline evaluation and two execution-verified training sets. Fine-tuning (phase 2) is next.
 
 | Phase | What | Status |
 |---|---|---|
 | 0 | Eval harness + 50 hand-written questions, baseline off-the-shelf models | Done |
 | 1a | Spider converted to DuckDB, every query verified by execution | Done |
-| 1b | DuckDB-specific examples (`LIST`/`STRUCT` columns, `QUALIFY`, dates) | Next |
-| 2 | Fine-tune a small model (LoRA / SFT) | Planned |
+| 1b | DuckDB-specific examples (`LIST`/`STRUCT` columns, `QUALIFY`, dates) | Done |
+| 2 | Fine-tune a small model (LoRA / SFT) | Next |
 | 3 | RL with execution-based rewards | Planned |
 | 4 | Hugging Face Space demo + CI/CD | Planned |
 
 ## Training data: Spider-DuckDB
 
-`src/text2sql/spider.py` converts [Spider](https://yale-lily.github.io/spider) (SQLite) into a DuckDB dataset and keeps an example only if the DuckDB query returns the same result as the original SQLite query on the same data. The dataset card in [`dataset_cards/spider-duckdb.md`](dataset_cards/spider-duckdb.md) describes every step.
+`src/text2sql/spider.py` converts [Spider](https://yale-lily.github.io/spider) (SQLite) into a DuckDB dataset and keeps an example only if the DuckDB query returns the same result as the original SQLite query on the same data. The dataset card in [`dataset_cards/spider-duckdb.md`](dataset_cards/spider-duckdb.md) describes every step. Published as [bhargavis/spider-duckdb](https://huggingface.co/datasets/bhargavis/spider-duckdb).
 
 | | train | validation |
 |---|---|---|
@@ -45,6 +45,28 @@ uv run python -m text2sql.hub      # assembles data/hf/spider-duckdb/ for the Hu
 ```
 
 The mirrored `spider_data.zip` was checked against the official Spider questions ([xlangai/spider](https://huggingface.co/datasets/xlangai/spider)): all 7,000 train and 1,034 dev rows are identical.
+
+## Training data: DuckDB-specific examples
+
+Spider never uses DuckDB features, and that is where the small models in the baseline failed most (8% and 17% on the `web` database, which has `LIST` columns). `src/text2sql/synth.py` generates examples that need those features, over four new databases built by `src/text2sql/synth_dbs.py`: music streaming, recipes, IoT sensors and code repositories. None of them is an evaluation database, so the evaluation stays held out.
+
+Each template has a target query that uses a DuckDB feature and a second query that answers the same question another way, often in plain SQL. For example, `list_contains(tags, 'live')` is checked against an `EXISTS` over `unnest(tags)`. An example is kept only if both queries run, the result is not empty or a single zero, and the two results match. "Top 1" questions with ties are dropped automatically: the target query returns one row, but its `rank()`-based check returns every tied row.
+
+| | train | validation |
+|---|---|---|
+| Databases | music, recipes, iot | repos (unseen schema) |
+| Candidates | 366 | 200 |
+| Kept | 342 | 193 |
+| Rejected: tie | 19 | 5 |
+| Rejected: zero or empty result | 5 | 2 |
+
+Features covered: `list_contains`, `list_has_all`/`list_has_any`, `len`, `unnest` (in `SELECT` and as a lateral join), `list_filter` and `list_transform` with lambdas, `LIST` of `STRUCT` columns, struct field access, `QUALIFY`, `arg_max`/`arg_min`, `FILTER`, `GROUP BY ALL`, `* EXCLUDE`, `list(... ORDER BY ...)`, `lag` and running totals, `date_trunc`, `date_diff`, `dayname` and other date functions. Lambdas use the `lambda x: ...` syntax, because DuckDB 2.0 rejects the older `x -> ...` form by default.
+
+```bash
+uv run python -m text2sql.synth   # about 30 seconds; writes data/processed/duckdb_synth/
+```
+
+The set is small next to Spider-DuckDB, so it will be upsampled when the two are mixed for fine-tuning.
 
 ## How evaluation works
 
