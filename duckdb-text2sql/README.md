@@ -4,14 +4,14 @@ Small, **execution-verified** text-to-SQL models for [DuckDB](https://duckdb.org
 
 ## Status
 
-Phases 0 and 1 are done: a baseline evaluation and two execution-verified training sets. Fine-tuning (phase 2) is next.
+Phases 0 and 1 are done: a baseline evaluation and two execution-verified training sets. Phase 2 (fine-tuning) is in progress: the training code is ready and tested, first GPU run pending.
 
 | Phase | What | Status |
 |---|---|---|
 | 0 | Eval harness + 50 hand-written questions, baseline off-the-shelf models | Done |
 | 1a | Spider converted to DuckDB, every query verified by execution | Done |
 | 1b | DuckDB-specific examples (`LIST`/`STRUCT` columns, `QUALIFY`, dates) | Done |
-| 2 | Fine-tune a small model (LoRA / SFT) | Next |
+| 2 | Fine-tune a small model (LoRA / SFT) | In progress |
 | 3 | RL with execution-based rewards | Planned |
 | 4 | Hugging Face Space demo + CI/CD | Planned |
 
@@ -67,6 +67,23 @@ uv run python -m text2sql.synth   # about 30 seconds; writes data/processed/duck
 ```
 
 The set is small next to Spider-DuckDB, so it will be upsampled when the two are mixed for fine-tuning.
+
+## Fine-tuning
+
+`src/text2sql/sft.py` trains a LoRA adapter for Qwen3.5-0.8B on one GPU. The notebook [`notebooks/kaggle_sft.ipynb`](notebooks/kaggle_sft.ipynb) runs it on a free Kaggle T4.
+
+- **Data:** Spider-DuckDB train (6,339) plus the DuckDB-specific train set repeated 4 times (1,368), 7,707 examples. The longest is 1,929 tokens, so nothing is truncated.
+- **Model:** only the text model is loaded (752M parameters; the vision encoder is skipped). LoRA (r=16) goes on the attention, linear-attention and MLP projections.
+- **Loss:** on the answer tokens only. The vocabulary has 248k entries, so the output layer runs only at answer positions instead of over the whole schema, which saves most of the activation memory.
+- **Prompt:** the same system prompt and chat template as the evaluation, with thinking off.
+- **Evaluation:** the base and fine-tuned models are scored under identical conditions (same precision, greedy decoding) on the 50 baseline questions, the DuckDB-specific validation set (unseen `repos` database) and 300 Spider-DuckDB validation questions (unseen databases). Before batching generation, the script checks that batched and one-at-a-time outputs match, since left padding could affect the linear-attention layers.
+
+The code is tested on CPU with a tiny randomly initialised Qwen3.5. The tests check the answer-only loss against the model's own full loss, check that the LoRA layers attach and training lowers the loss, and check that batched generation matches single generation:
+
+```bash
+uv run --with torch==2.11.0 --with transformers==5.23.0 --with peft==0.21.3 --with accelerate \
+    pytest tests/test_sft_model.py
+```
 
 ## How evaluation works
 

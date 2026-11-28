@@ -1,0 +1,4 @@
+# Training dependencies (Kaggle and Colab already ship a CUDA build of torch).
+transformers==5.23.0
+peft==0.21.3
+accelerate>=1.10
