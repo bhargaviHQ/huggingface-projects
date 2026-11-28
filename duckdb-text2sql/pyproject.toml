@@ -5,7 +5,7 @@ description = "Small, execution-verified text-to-SQL models for DuckDB"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "duckdb>=1.1",
+    "duckdb>=2.0.1",
     "pyarrow>=26.0.1",
     "sqlglot>=30.35.0",
 ]
